@@ -7,10 +7,10 @@ An open-source Electronic Heat Management Device for hookah. The Warp Core repla
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 
-[Warp Core eHMD Assembled](docs/Whole_Unit.jpeg)
-[Warp Core eHMD on Hookah](docs/eHMD_on_Bowl.jpeg)
-[Warp Core App Screenshot](docs/App_Screenshot.png)
-[Warp Core Inside](docs/Inside_Unit.jpeg)
+![Warp Core eHMD Assembled](docs/Whole_Unit.jpeg)
+![Warp Core eHMD on Hookah](docs/eHMD_on_Bowl.jpeg)
+![Warp Core App Screenshot](docs/App_Screenshot.png)
+![Warp Core Inside](docs/Inside_Unit.jpeg)
 
 ## What Is It?
 
