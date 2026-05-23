@@ -8,6 +8,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import java.io.File
 
@@ -148,6 +151,22 @@ fun SettingsScreen(
                 Text("Electronic Heat Management Device", style = MaterialTheme.typography.bodyMedium)
                 Text("BLE Protocol: See docs/BLE_PROTOCOL.md", style = MaterialTheme.typography.bodySmall)
             }
+        }
+
+        // Donate
+        val context = LocalContext.current
+        TextButton(
+            onClick = {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://paypal.me/GThaxton"))
+                context.startActivity(intent)
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                "🪝 Buy me a Bowl",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
     }
 
