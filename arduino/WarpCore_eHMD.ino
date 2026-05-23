@@ -42,6 +42,7 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 #include <ArduinoJson.h>
+#include <math.h>
 
 // ============================================================================
 // BLE UUIDs
@@ -469,10 +470,20 @@ void sendBleStatus() {
   doc["temp_actual"] = isnan(actualTemp) ? -1 : (int)(actualTemp + 0.5);
   doc["armed"] = systemArmed ? 1 : 0;
   doc["pwm"] = (int)((pidOutput / 255.0) * 100.0);
+  doc["pid_raw"] = (int)pidOutput;
   doc["battery"] = batteryPercent;
   doc["session"] = (int)sessionElapsed;
   
-  char buffer[256];
+  // Debug fields — PID internals
+  JsonObject dbg = doc.createNestedObject("dbg");
+  dbg["kp"] = roundf(Kp * 100.0) / 100.0;
+  dbg["ki"] = roundf(Ki * 100.0) / 100.0;
+  dbg["kd"] = roundf(Kd * 100.0) / 100.0;
+  dbg["err"] = roundf((setTemp - actualTemp) * 10.0) / 10.0;
+  dbg["pwm_raw"] = (int)pidOutput;
+  dbg["voltage"] = roundf(systemVoltage * 100.0) / 100.0;
+  
+  char buffer[384];
   serializeJson(doc, buffer, sizeof(buffer));
   pNotifyChar->setValue(buffer);
   pNotifyChar->notify();
@@ -786,6 +797,19 @@ void loop() {
     if (myPID.Compute()) {
       ledcWrite(MOSFET_PWM_CHANNEL, (int)pidOutput);
     }
+  }
+
+  // Debug: print PID state every 2 seconds
+  static unsigned long lastPidDebug = 0;
+  if (millis() - lastPidDebug > 2000) {
+    Serial.print(F("PID: out=")); Serial.print((int)pidOutput);
+    Serial.print(F(" actual=")); Serial.print(actualTemp, 1);
+    Serial.print(F(" set=")); Serial.print(setTemp, 1);
+    Serial.print(F(" armed=")); Serial.print(systemArmed);
+    Serial.print(F(" Kp=")); Serial.print(Kp, 2);
+    Serial.print(F(" Ki=")); Serial.print(Ki, 2);
+    Serial.print(F(" Kd=")); Serial.println(Kd, 2);
+    lastPidDebug = millis();
   }
 
   if (redAlertActive) {

@@ -33,6 +33,7 @@ object Screens {
     val Control = NavScreen("control", "Control", Icons.Filled.Thermostat)
     val Profiles = NavScreen("profiles", "Profiles", Icons.Filled.Bookmark)
     val Settings = NavScreen("settings", "Settings", Icons.Filled.Settings)
+    val Debug = NavScreen("debug", "Debug", Icons.Filled.BugReport)
 }
 
 @Composable
@@ -129,7 +130,7 @@ private fun ConnectedNavHost(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    val connectedScreens = listOf(Screens.Control, Screens.Profiles, Screens.Settings)
+    val connectedScreens = listOf(Screens.Control, Screens.Profiles, Screens.Settings, Screens.Debug)
 
     Scaffold(
         modifier = modifier.statusBarsPadding(),
@@ -191,6 +192,12 @@ private fun ConnectedNavHost(
                     onStepSizeChange = onStepSizeChange,
                     onExportSession = onExportSession,
                     onSetPid = onSetPid
+                )
+            }
+            composable(Screens.Debug.route) {
+                DebugScreen(
+                    status = deviceStatus,
+                    connectionState = connectionState
                 )
             }
         }

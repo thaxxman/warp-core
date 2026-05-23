@@ -11,8 +11,16 @@ data class DeviceStatus(
     val tempActual: Int = 0,         // Actual temp in °C, -1 if sensor fault
     val armed: Boolean = false,       // Armed state
     val pwm: Int = 0,                // PWM output percentage (0-100)
+    val pidRaw: Int = 0,             // Raw PID output (0-255)
     val battery: Int = 0,             // Battery percentage
-    val session: Int = 0              // Session elapsed seconds
+    val session: Int = 0,             // Session elapsed seconds
+    // Debug sub-object
+    val debugKp: Double = 0.0,
+    val debugKi: Double = 0.0,
+    val debugKd: Double = 0.0,
+    val debugError: Double = 0.0,     // setTemp - actualTemp
+    val debugPwmRaw: Int = 0,         // Same as pidRaw, from dbg object
+    val debugVoltage: Double = 0.0     // System voltage
 ) {
     /** True if we're in a thermal runaway condition */
     val isRedAlert: Boolean get() = status == "red_alert"

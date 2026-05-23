@@ -18,6 +18,7 @@ object BleMessageParser {
     fun parseStatus(jsonString: String): DeviceStatus? {
         return try {
             val json = gson.fromJson(jsonString, Map::class.java)
+            val dbg = json["dbg"] as? Map<*, *>
             DeviceStatus(
                 status = json["status"] as? String ?: "ok",
                 msg = json["msg"] as? String,
@@ -25,8 +26,15 @@ object BleMessageParser {
                 tempActual = (json["temp_actual"] as? Double)?.toInt() ?: -1,
                 armed = (json["armed"] as? Double)?.toInt() == 1,
                 pwm = (json["pwm"] as? Double)?.toInt() ?: 0,
+                pidRaw = (json["pid_raw"] as? Double)?.toInt() ?: 0,
                 battery = (json["battery"] as? Double)?.toInt() ?: 0,
-                session = (json["session"] as? Double)?.toInt() ?: 0
+                session = (json["session"] as? Double)?.toInt() ?: 0,
+                debugKp = (dbg?.get("kp") as? Double) ?: 0.0,
+                debugKi = (dbg?.get("ki") as? Double) ?: 0.0,
+                debugKd = (dbg?.get("kd") as? Double) ?: 0.0,
+                debugError = (dbg?.get("err") as? Double) ?: 0.0,
+                debugPwmRaw = (dbg?.get("pwm_raw") as? Double)?.toInt() ?: 0,
+                debugVoltage = (dbg?.get("voltage") as? Double) ?: 0.0
             )
         } catch (e: JsonSyntaxException) {
             null
