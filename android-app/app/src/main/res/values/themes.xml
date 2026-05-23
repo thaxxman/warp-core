@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.WarpCore" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@color/dark_background</item>
+        <item name="android:navigationBarColor">@color/dark_background</item>
+        <item name="android:windowBackground">@color/dark_background</item>
+    </style>
+
+    <color name="dark_background">#FF0A0A1A</color>
+</resources>

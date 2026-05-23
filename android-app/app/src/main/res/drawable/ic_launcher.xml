@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- Simple flame/temperature icon in Trek blue -->
+    <path
+        android:fillColor="#4488FF"
+        android:pathData="M24,4C24,4 14,16 14,28C14,33.5 18.5,38 24,38C29.5,38 34,33.5 34,28C34,16 24,4 24,4ZM24,34C21,34 18,31 18,28C18,22 24,14 24,14C24,14 30,22 30,28C30,31 27,34 24,34Z"/>
+</vector>

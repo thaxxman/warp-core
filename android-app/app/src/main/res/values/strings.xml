@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Warp Core eHMD</string>
+    <string name="bluetooth_connecting">Connecting to Warp Core…</string>
+    <string name="bluetooth_disconnected">Disconnected</string>
+    <string name="emergency_stop">EMERGENCY STOP</string>
+    <string name="armed">ARMED</string>
+    <string name="disarmed">DISARMED</string>
+    <string name="red_alert">RED ALERT</string>
+    <string name="sensor_error">SENSOR ERR</string>
+</resources>

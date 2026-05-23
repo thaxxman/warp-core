@@ -1,0 +1,44 @@
+# Android
+android-app/.gradle/
+android-app/build/
+android-app/app/build/
+android-app/local.properties
+android-app/.idea/
+android-app/*.iml
+android-app/app/*.iml
+android-app/app/schemas/
+*.apk
+*.aab
+*.dex
+*.class
+*.jar
+!android-app/gradle/wrapper/gradle-wrapper.jar
+
+# Kotlin
+*.kt.xml
+
+# Arduino
+arduino/*.hex
+arduino/*.bin
+arduino/*.elf
+arduino/build/
+
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+__MACOSX/
+
+# IDE
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.vscode/
+.settings/
+
+# Misc
+*.log
+*.tmp
