@@ -7,7 +7,7 @@
  * 
  * Hardware:
  *   - MAX6675 thermocouple on pins D10 (SCK), D11 (CS), D12 (SO)
- *   - MOSFET on D9 (PWM channel 1)
+ *   - MOSFET on D4 (PWM channel 1) — was D9, moved due to GPIO 9 conflict
  *   - SSD1306 128x64 OLED on I2C
  *   - Buttons: D5 (press/select), D6 (right), D7 (left)
  *   - Buzzer on D8 (PWM channel 0)
@@ -81,7 +81,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 // ============================================================================
 // Hardware Pin Definitions (Arduino Nano ESP32)
 // ============================================================================
-const int PIN_MOSFET    = 9;
+const int PIN_MOSFET    = 4;
 const int PIN_SO        = 12;
 const int PIN_CS        = 11;
 const int PIN_SCK       = 10;
