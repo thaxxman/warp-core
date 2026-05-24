@@ -7,7 +7,7 @@
  * 
  * Hardware:
  *   - MAX6675 thermocouple on pins D10 (SCK), D11 (CS), D12 (SO)
- *   - MOSFET on D4 (PWM channel 1) — was D9, moved due to GPIO 9 conflict
+ *   - MOSFET on D4 — bang-bang (digitalWrite) control, was D9 moved due to GPIO 9 conflict
  *   - SSD1306 128x64 OLED on I2C
  *   - Buttons: D5 (press/select), D6 (right), D7 (left)
  *   - Buzzer on D8 (PWM channel 0)
@@ -97,10 +97,10 @@ MAX6675 thermocouple(PIN_SCK, PIN_CS, PIN_SO);
 // PWM Channel Assignments (ESP32 ledc)
 // ============================================================================
 const int BUZZER_PWM_CHANNEL  = 0;
-// MOSFET PWM at 20 kHz (ultrasonic — above human hearing, no coil whine)
-// MOSFET driver supports up to 20 kHz. 8-bit resolution is plenty for thermal.
-const int MOSFET_PWM_CHANNEL  = 1;
-const int MOSFET_PWM_FREQ     = 20000;
+// MOSFET: driven by digitalWrite (bang-bang) — LEDC produced insufficient
+// voltage on this board. Time-proportioned cycle gives smooth thermal control
+// with zero audible noise. See MOSFET_CYCLE_MS below.
+const int MOSFET_PWM_CHANNEL  = -1;  // unused — kept as guard constant
 
 // ============================================================================
 // Voltage Divider Calibration
@@ -149,6 +149,16 @@ int thermalRunawayCount = 0;
 bool redAlertActive = false;
 
 bool targetReachedNotified = false;
+
+// ============================================================================
+// MOSFET Bang-Bang Control
+// ============================================================================
+// LEDC PWM didn't drive the MOSFET gate properly (0.8V vs expected 3.3V).
+// Instead, we use time-proportioned bang-bang: over a 1-second window,
+// the MOSFET is ON for (pidOutput/255)*CYCLE_MS ms and OFF for the rest.
+// Thermal mass of the heater smooths this into steady power delivery.
+const unsigned long MOSFET_CYCLE_MS = 1000;  // 1-second cycle
+unsigned long mosfetCycleStart = 0;           // ms when current cycle began
 
 // ============================================================================
 // BLE State (ESP32 built-in NimBLE)
@@ -370,7 +380,7 @@ class WriteCallbacks : public BLECharacteristicCallbacks {
         Serial.println(F("BLE: ARMED"));
       } else if (val == 0 && systemArmed) {
         systemArmed = false;
-        ledcWrite(MOSFET_PWM_CHANNEL, 0);
+        digitalWrite(PIN_MOSFET, LOW);
         pidOutput = 0;
         sessionElapsed = 0;
         esp32Tone(500, 500);
@@ -380,7 +390,7 @@ class WriteCallbacks : public BLECharacteristicCallbacks {
     else if (strcmp(cmd, "e_stop") == 0) {
       systemArmed = false;
       redAlertActive = false;
-      ledcWrite(MOSFET_PWM_CHANNEL, 0);
+      digitalWrite(PIN_MOSFET, LOW);
       pidOutput = 0;
       sessionElapsed = 0;
       esp32Tone(3000, 300);
@@ -482,7 +492,7 @@ void sendBleStatus() {
   dbg["err"] = roundf((setTemp - actualTemp) * 10.0) / 10.0;
   dbg["pwm_raw"] = (int)pidOutput;
   dbg["voltage"] = roundf(systemVoltage * 100.0) / 100.0;
-  dbg["pin_state"] = digitalRead(PIN_MOSFET);  // DIAGNOSTIC: actual pin state
+  dbg["pin_state"] = digitalRead(PIN_MOSFET);  // bang-bang state: 1=ON, 0=OFF
   
   char buffer[384];
   serializeJson(doc, buffer, sizeof(buffer));
@@ -515,7 +525,7 @@ void handleButton() {
         redAlertActive = false;
         esp32Tone(1500, 500);
       } else {
-        ledcWrite(MOSFET_PWM_CHANNEL, 0);
+        digitalWrite(PIN_MOSFET, LOW);
         pidOutput = 0;
         sessionElapsed = 0;
         esp32Tone(500, 500);
@@ -608,7 +618,7 @@ void checkThermalRunaway() {
     if (thermalRunawayCount >= THERMAL_RUNAWAY_COUNT) {
       redAlertActive = true;
       systemArmed = false;
-      ledcWrite(MOSFET_PWM_CHANNEL, 0);
+      digitalWrite(PIN_MOSFET, LOW);
       pidOutput = 0;
       sessionElapsed = 0;
       esp32Tone(3000, 300);
@@ -718,9 +728,7 @@ void setup() {
   ledcSetup(BUZZER_PWM_CHANNEL, 2000, 8);
   ledcAttachPin(PIN_BUZZER, BUZZER_PWM_CHANNEL);
 
-  // MOSFET PWM — 20 kHz ultrasonic, no audible whine
-  ledcSetup(MOSFET_PWM_CHANNEL, MOSFET_PWM_FREQ, 8);
-  ledcAttachPin(PIN_MOSFET, MOSFET_PWM_CHANNEL);
+  // MOSFET: bang-bang control via digitalWrite (no LEDC — see notes above)
 
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("SSD1306 allocation failed"));
@@ -740,7 +748,7 @@ void setup() {
 
   pinMode(PIN_CS, OUTPUT);
   digitalWrite(PIN_CS, HIGH);
-  pinMode(PIN_MOSFET, OUTPUT);  // DIAGNOSTIC: ensure output mode
+  pinMode(PIN_MOSFET, OUTPUT);
   pinMode(BTN_LEFT, INPUT_PULLUP);
   pinMode(BTN_RIGHT, INPUT_PULLUP);
   pinMode(BTN_PRESS, INPUT_PULLUP);
@@ -784,11 +792,9 @@ void loop() {
     sessionElapsed = (millis() - sessionStartTime) / 1000;
   }
 
-  // PID Control & Safety
-  // DIAGNOSTIC: force pin HIGH with digitalWrite to bypass LEDC
+  // PID Control & Safety — time-proportioned bang-bang for MOSFET
   if (isnan(actualTemp)) {
     digitalWrite(PIN_MOSFET, LOW);
-    ledcWrite(MOSFET_PWM_CHANNEL, 0);
     pidOutput = 0;
     if (millis() - lastAlarmTime > 1000) {
       esp32Tone(3000, 200);
@@ -796,13 +802,21 @@ void loop() {
     }
   } else if (!systemArmed) {
     digitalWrite(PIN_MOSFET, LOW);
-    ledcWrite(MOSFET_PWM_CHANNEL, 0);
     pidOutput = 0;
   } else {
     if (myPID.Compute()) {
-      ledcWrite(MOSFET_PWM_CHANNEL, (int)pidOutput);
-      // DIAGNOSTIC: if ledcWrite didn't drive it, force with digitalWrite
-      digitalWrite(PIN_MOSFET, HIGH);
+      // Bang-bang: over MOSFET_CYCLE_MS, hold HIGH for pidOutput/255 fraction
+      unsigned long onTime = (unsigned long)(pidOutput / 255.0 * MOSFET_CYCLE_MS);
+      unsigned long elapsed = millis() - mosfetCycleStart;
+      if (elapsed >= MOSFET_CYCLE_MS) {
+        mosfetCycleStart = millis();
+        elapsed = 0;
+      }
+      if (onTime > 0 && elapsed < onTime) {
+        digitalWrite(PIN_MOSFET, HIGH);
+      } else {
+        digitalWrite(PIN_MOSFET, LOW);
+      }
     }
   }
 
