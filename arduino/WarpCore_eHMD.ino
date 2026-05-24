@@ -482,6 +482,7 @@ void sendBleStatus() {
   dbg["err"] = roundf((setTemp - actualTemp) * 10.0) / 10.0;
   dbg["pwm_raw"] = (int)pidOutput;
   dbg["voltage"] = roundf(systemVoltage * 100.0) / 100.0;
+  dbg["pin_state"] = digitalRead(PIN_MOSFET);  // DIAGNOSTIC: actual pin state
   
   char buffer[384];
   serializeJson(doc, buffer, sizeof(buffer));
@@ -739,6 +740,7 @@ void setup() {
 
   pinMode(PIN_CS, OUTPUT);
   digitalWrite(PIN_CS, HIGH);
+  pinMode(PIN_MOSFET, OUTPUT);  // DIAGNOSTIC: ensure output mode
   pinMode(BTN_LEFT, INPUT_PULLUP);
   pinMode(BTN_RIGHT, INPUT_PULLUP);
   pinMode(BTN_PRESS, INPUT_PULLUP);
@@ -783,7 +785,9 @@ void loop() {
   }
 
   // PID Control & Safety
+  // DIAGNOSTIC: force pin HIGH with digitalWrite to bypass LEDC
   if (isnan(actualTemp)) {
+    digitalWrite(PIN_MOSFET, LOW);
     ledcWrite(MOSFET_PWM_CHANNEL, 0);
     pidOutput = 0;
     if (millis() - lastAlarmTime > 1000) {
@@ -791,11 +795,14 @@ void loop() {
       lastAlarmTime = millis();
     }
   } else if (!systemArmed) {
+    digitalWrite(PIN_MOSFET, LOW);
     ledcWrite(MOSFET_PWM_CHANNEL, 0);
     pidOutput = 0;
   } else {
     if (myPID.Compute()) {
       ledcWrite(MOSFET_PWM_CHANNEL, (int)pidOutput);
+      // DIAGNOSTIC: if ledcWrite didn't drive it, force with digitalWrite
+      digitalWrite(PIN_MOSFET, HIGH);
     }
   }
 
