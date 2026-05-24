@@ -9,7 +9,7 @@ An open-source Electronic Heat Management Device for hookah. The Warp Core repla
 
 ![Warp Core eHMD Assembled](docs/Whole_Unit.jpeg)
 ![Warp Core eHMD on Hookah](docs/eHMD_on_Bowl.jpeg)
-![Warp Core App Screenshot](docs/App_Screenshot.png)
+![Warp Core App Screenshot](docs/App_Screenshot.jpeg)
 ![Warp Core Inside](docs/Inside_Unit.jpeg)
 
 ## What Is It?
