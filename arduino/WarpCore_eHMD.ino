@@ -94,14 +94,13 @@ const int VOLTAGE_PIN   = A7;
 MAX6675 thermocouple(PIN_SCK, PIN_CS, PIN_SO);
 
 // ============================================================================
-// PWM Configuration (ESP32 LEDC v3.x — pin-based API)
+// PWM Channel Assignments (ESP32 ledc)
 // ============================================================================
-// ESP32 Arduino Core v3.x changed ledcWrite/ledcWriteTone to take the PIN
-// number instead of the channel number. Old channel-based calls silently write
-// to the wrong GPIO. Use the new API: ledcAttach, ledcWrite(pin, duty),
-// ledcWriteTone(pin, freq).
-const int MOSFET_PWM_FREQ     = 20000;  // 20 kHz ultrasonic — no audible whine
-const int MOSFET_PWM_RES      = 8;      // 8-bit resolution (0–255), plenty for thermal
+const int BUZZER_PWM_CHANNEL  = 0;
+// MOSFET PWM at 20 kHz (ultrasonic — above human hearing, no coil whine)
+// MOSFET driver supports up to 20 kHz. 8-bit resolution is plenty for thermal.
+const int MOSFET_PWM_CHANNEL  = 1;
+const int MOSFET_PWM_FREQ     = 20000;
 
 // ============================================================================
 // Voltage Divider Calibration
@@ -200,18 +199,18 @@ int entNotes = sizeof(entMelody) / sizeof(entMelody[0]) / 2;
 
 void esp32Tone(int frequency, int duration = 0) {
   if (frequency == REST || frequency == 0) {
-    ledcWriteTone(PIN_BUZZER, 0);
+    ledcWriteTone(BUZZER_PWM_CHANNEL, 0);
   } else {
-    ledcWriteTone(PIN_BUZZER, frequency);
+    ledcWriteTone(BUZZER_PWM_CHANNEL, frequency);
     if (duration > 0) {
       delay(duration);
-      ledcWriteTone(PIN_BUZZER, 0);
+      ledcWriteTone(BUZZER_PWM_CHANNEL, 0);
     }
   }
 }
 
 void esp32NoTone() {
-  ledcWriteTone(PIN_BUZZER, 0);
+  ledcWriteTone(BUZZER_PWM_CHANNEL, 0);
 }
 
 void playMelody(int melody[], int numNotes, int speed) {
@@ -371,7 +370,7 @@ class WriteCallbacks : public BLECharacteristicCallbacks {
         Serial.println(F("BLE: ARMED"));
       } else if (val == 0 && systemArmed) {
         systemArmed = false;
-        ledcWrite(PIN_MOSFET, 0);
+        ledcWrite(MOSFET_PWM_CHANNEL, 0);
         pidOutput = 0;
         sessionElapsed = 0;
         esp32Tone(500, 500);
@@ -381,7 +380,7 @@ class WriteCallbacks : public BLECharacteristicCallbacks {
     else if (strcmp(cmd, "e_stop") == 0) {
       systemArmed = false;
       redAlertActive = false;
-      ledcWrite(PIN_MOSFET, 0);
+      ledcWrite(MOSFET_PWM_CHANNEL, 0);
       pidOutput = 0;
       sessionElapsed = 0;
       esp32Tone(3000, 300);
@@ -515,7 +514,7 @@ void handleButton() {
         redAlertActive = false;
         esp32Tone(1500, 500);
       } else {
-        ledcWrite(PIN_MOSFET, 0);
+        ledcWrite(MOSFET_PWM_CHANNEL, 0);
         pidOutput = 0;
         sessionElapsed = 0;
         esp32Tone(500, 500);
@@ -608,7 +607,7 @@ void checkThermalRunaway() {
     if (thermalRunawayCount >= THERMAL_RUNAWAY_COUNT) {
       redAlertActive = true;
       systemArmed = false;
-      ledcWrite(PIN_MOSFET, 0);
+      ledcWrite(MOSFET_PWM_CHANNEL, 0);
       pidOutput = 0;
       sessionElapsed = 0;
       esp32Tone(3000, 300);
@@ -715,11 +714,12 @@ void setup() {
   EEPROM.begin(EEPROM_SIZE);
   loadEEPROM();
 
-  // Buzzer — pin-based LEDC v3.x API
-  ledcAttach(PIN_BUZZER, 2000, 8);
+  ledcSetup(BUZZER_PWM_CHANNEL, 2000, 8);
+  ledcAttachPin(PIN_BUZZER, BUZZER_PWM_CHANNEL);
 
-  // MOSFET PWM — 20 kHz ultrasonic, no audible whine (v3.x pin-based API)
-  ledcAttach(PIN_MOSFET, MOSFET_PWM_FREQ, MOSFET_PWM_RES);
+  // MOSFET PWM — 20 kHz ultrasonic, no audible whine
+  ledcSetup(MOSFET_PWM_CHANNEL, MOSFET_PWM_FREQ, 8);
+  ledcAttachPin(PIN_MOSFET, MOSFET_PWM_CHANNEL);
 
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("SSD1306 allocation failed"));
@@ -784,18 +784,18 @@ void loop() {
 
   // PID Control & Safety
   if (isnan(actualTemp)) {
-    ledcWrite(PIN_MOSFET, 0);
+    ledcWrite(MOSFET_PWM_CHANNEL, 0);
     pidOutput = 0;
     if (millis() - lastAlarmTime > 1000) {
       esp32Tone(3000, 200);
       lastAlarmTime = millis();
     }
   } else if (!systemArmed) {
-    ledcWrite(PIN_MOSFET, 0);
+    ledcWrite(MOSFET_PWM_CHANNEL, 0);
     pidOutput = 0;
   } else {
     if (myPID.Compute()) {
-      ledcWrite(PIN_MOSFET, (int)pidOutput);
+      ledcWrite(MOSFET_PWM_CHANNEL, (int)pidOutput);
     }
   }
 
