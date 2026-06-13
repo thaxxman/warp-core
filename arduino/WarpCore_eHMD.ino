@@ -8,7 +8,7 @@
  * Hardware:
  *   - MAX6675 thermocouple on pins D10 (SCK), D11 (CS), D12 (SO)
  *   - MOSFET on D4 — bang-bang (digitalWrite) control, was D9 moved due to GPIO 9 conflict
- *   - SSD1306 128x64 OLED on I2C
+ *   - SSD1306 128x64 OLED on I2C (D2=SDA, D3=SCL)
  *   - Buttons: D5 (press/select), D6 (right), D7 (left)
  *   - Buzzer on D8 (PWM channel 0)
  *   - Battery voltage divider on A7
@@ -29,6 +29,10 @@
  */
 
 #include <Wire.h>
+
+// Custom I2C pins for OLED — reassigned from default A4/A5 to D2/SDA, D3/SCL
+TwoWire myWire = TwoWire(0);
+
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include "max6675.h"
@@ -76,7 +80,7 @@ const double DEFAULT_KD = 1.0;
 #define SCREEN_HEIGHT 64
 #define OLED_RESET    -1
 #define SCREEN_ADDRESS 0x3C
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &myWire, OLED_RESET);
 
 // ============================================================================
 // Hardware Pin Definitions (Arduino Nano ESP32)
@@ -729,6 +733,9 @@ void setup() {
   ledcAttachPin(PIN_BUZZER, BUZZER_PWM_CHANNEL);
 
   // MOSFET: bang-bang control via digitalWrite (no LEDC — see notes above)
+
+  // Initialize I2C on custom pins: D2 = SDA, D3 = SCL
+  myWire.begin(2, 3);
 
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("SSD1306 allocation failed"));
