@@ -11,7 +11,6 @@
  *   - SSD1306 128x64 OLED on I2C (D2=SDA, D3=SCL)
  *   - Buttons: D5 (press/select), D6 (right), D7 (left)
  *   - Buzzer on D8 (PWM channel 0)
- *   - Battery voltage divider on A7
  * 
  * BLE Protocol: See docs/BLE_PROTOCOL.md
  * 
@@ -93,7 +92,6 @@ const int BTN_LEFT      = 7;
 const int BTN_RIGHT     = 6;
 const int BTN_PRESS     = 5;
 const int PIN_BUZZER    = 8;
-const int VOLTAGE_PIN   = A7;
 
 MAX6675 thermocouple(PIN_SCK, PIN_CS, PIN_SO);
 
@@ -105,14 +103,6 @@ const int BUZZER_PWM_CHANNEL  = 0;
 // voltage on this board. Time-proportioned cycle gives smooth thermal control
 // with zero audible noise. See MOSFET_CYCLE_MS below.
 const int MOSFET_PWM_CHANNEL  = -1;  // unused — kept as guard constant
-
-// ============================================================================
-// Voltage Divider Calibration
-// ============================================================================
-const float rOhm1 = 30000.0;
-const float rOhm2 = 7500.0;
-const float baseVoltage = 3.3;
-const float voltageCalibration = 1.1038;
 
 // ============================================================================
 // Safety Limits
@@ -140,9 +130,6 @@ unsigned long lastTempTime = 0;
 unsigned long lastDisplayUpdate = 0;
 unsigned long lastAlarmTime = 0;
 
-float systemVoltage = 0.0;
-int batteryPercent = 0;
-
 unsigned long buttonPressedTime = 0;
 const int LONG_PRESS_DURATION = 3000;
 
@@ -153,6 +140,13 @@ int thermalRunawayCount = 0;
 bool redAlertActive = false;
 
 bool targetReachedNotified = false;
+
+// ============================================================================
+// Safety Ramp — limit PWM to 40% until temp reaches 200°C
+// ============================================================================
+const double SAFETY_RAMP_THRESHOLD = 200.0;   // 200°C unlock temp
+const float  SAFETY_RAMP_LIMIT      = 0.40;    // 40% max PWM during ramp
+bool safetyRampActive = true;
 
 // ============================================================================
 // MOSFET Bang-Bang Control
@@ -310,18 +304,6 @@ void saveEEPROM() {
 }
 
 // ============================================================================
-// Battery Monitoring
-// ============================================================================
-
-void readVoltage() {
-  int rawADC = analogRead(VOLTAGE_PIN);
-  float sensorOutVolts = (rawADC * baseVoltage) / 4095.0;
-  systemVoltage = (sensorOutVolts * (rOhm1 + rOhm2) / rOhm2) * voltageCalibration;
-  batteryPercent = map((int)(systemVoltage * 100.0), 640, 840, 0, 100);
-  batteryPercent = constrain(batteryPercent, 0, 100);
-}
-
-// ============================================================================
 // BLE Callbacks (ESP32 built-in NimBLE)
 // ============================================================================
 
@@ -380,6 +362,7 @@ class WriteCallbacks : public BLECharacteristicCallbacks {
         targetReachedNotified = false;
         thermalRunawayCount = 0;
         redAlertActive = false;
+        safetyRampActive = true;
         esp32Tone(1500, 500);
         Serial.println(F("BLE: ARMED"));
       } else if (val == 0 && systemArmed) {
@@ -397,6 +380,7 @@ class WriteCallbacks : public BLECharacteristicCallbacks {
       digitalWrite(PIN_MOSFET, LOW);
       pidOutput = 0;
       sessionElapsed = 0;
+      safetyRampActive = true;
       esp32Tone(3000, 300);
       delay(100);
       esp32Tone(3000, 300);
@@ -485,7 +469,6 @@ void sendBleStatus() {
   doc["armed"] = systemArmed ? 1 : 0;
   doc["pwm"] = (int)((pidOutput / 255.0) * 100.0);
   doc["pid_raw"] = (int)pidOutput;
-  doc["battery"] = batteryPercent;
   doc["session"] = (int)sessionElapsed;
   
   // Debug fields — PID internals
@@ -495,7 +478,6 @@ void sendBleStatus() {
   dbg["kd"] = roundf(Kd * 100.0) / 100.0;
   dbg["err"] = roundf((setTemp - actualTemp) * 10.0) / 10.0;
   dbg["pwm_raw"] = (int)pidOutput;
-  dbg["voltage"] = roundf(systemVoltage * 100.0) / 100.0;
   dbg["pin_state"] = digitalRead(PIN_MOSFET);  // bang-bang state: 1=ON, 0=OFF
   
   char buffer[384];
@@ -527,6 +509,7 @@ void handleButton() {
         targetReachedNotified = false;
         thermalRunawayCount = 0;
         redAlertActive = false;
+        safetyRampActive = true;
         esp32Tone(1500, 500);
       } else {
         digitalWrite(PIN_MOSFET, LOW);
@@ -669,13 +652,10 @@ void updateDisplay() {
     }
   }
   
-  // Battery — right-aligned so it never wraps
-  {
-    char batBuf[16];
-    snprintf(batBuf, sizeof(batBuf), "%.1fV%d%%", systemVoltage, batteryPercent);
-    int batLen = strlen(batBuf);
-    display.setCursor(128 - (batLen * 6), 0);
-    display.print(batBuf);
+  // Safety ramp indicator — right-aligned
+  if (safetyRampActive) {
+    display.setCursor(100, 0);
+    display.print(F("RAMP"));
   }
 
   // Line 2: Target temperature
@@ -784,7 +764,6 @@ void loop() {
   // Read sensors every 250ms
   if (millis() - lastTempTime > 250) {
     actualTemp = thermocouple.readCelsius();
-    readVoltage();
     lastTempTime = millis();
 
     if (systemArmed && !targetReachedNotified && !redAlertActive && actualTemp >= setTemp) {
@@ -812,6 +791,17 @@ void loop() {
     pidOutput = 0;
   } else {
     if (myPID.Compute()) {
+      // Safety Ramp — cap PWM at 40% until temp reaches 200°C
+      if (safetyRampActive) {
+        if (actualTemp >= SAFETY_RAMP_THRESHOLD) {
+          safetyRampActive = false;
+          Serial.println(F("SAFETY RAMP: 200°C reached — full PID unlocked"));
+        } else {
+          float capped255 = SAFETY_RAMP_LIMIT * 255.0;
+          if (pidOutput > capped255) pidOutput = capped255;
+        }
+      }
+
       // Bang-bang: over MOSFET_CYCLE_MS, hold HIGH for pidOutput/255 fraction
       unsigned long onTime = (unsigned long)(pidOutput / 255.0 * MOSFET_CYCLE_MS);
       unsigned long elapsed = millis() - mosfetCycleStart;
