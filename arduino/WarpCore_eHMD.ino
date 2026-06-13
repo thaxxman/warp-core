@@ -142,10 +142,11 @@ bool redAlertActive = false;
 bool targetReachedNotified = false;
 
 // ============================================================================
-// Safety Ramp — limit PWM to 40% until temp reaches 200°C
+// Safety Ramp — linear PWM scaling from 40% at 50°C to 100% at 200°C
 // ============================================================================
-const double SAFETY_RAMP_THRESHOLD = 200.0;   // 200°C unlock temp
-const float  SAFETY_RAMP_LIMIT      = 0.40;    // 40% max PWM during ramp
+const double SAFETY_RAMP_START_TEMP  = 50.0;    // ramp starts here
+const double SAFETY_RAMP_END_TEMP    = 200.0;   // ramp ends here (full unlock)
+const float  SAFETY_RAMP_MIN_LIMIT   = 0.40;    // 40% max below start temp
 bool safetyRampActive = true;
 
 // ============================================================================
@@ -791,13 +792,17 @@ void loop() {
     pidOutput = 0;
   } else {
     if (myPID.Compute()) {
-      // Safety Ramp — cap PWM at 40% until temp reaches 200°C
+      // Safety Ramp — linear scale: 40% at 50°C → 100% at 200°C
       if (safetyRampActive) {
-        if (actualTemp >= SAFETY_RAMP_THRESHOLD) {
+        if (actualTemp >= SAFETY_RAMP_END_TEMP) {
           safetyRampActive = false;
           Serial.println(F("SAFETY RAMP: 200°C reached — full PID unlocked"));
         } else {
-          float capped255 = SAFETY_RAMP_LIMIT * 255.0;
+          // Linear interpolation from SAFETY_RAMP_MIN_LIMIT → 1.0 over temp range
+          float t = constrain(actualTemp, SAFETY_RAMP_START_TEMP, SAFETY_RAMP_END_TEMP);
+          float rampLimit = SAFETY_RAMP_MIN_LIMIT + (1.0 - SAFETY_RAMP_MIN_LIMIT) *
+                            ((t - SAFETY_RAMP_START_TEMP) / (SAFETY_RAMP_END_TEMP - SAFETY_RAMP_START_TEMP));
+          float capped255 = rampLimit * 255.0;
           if (pidOutput > capped255) pidOutput = capped255;
         }
       }
