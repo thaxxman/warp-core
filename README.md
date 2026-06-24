@@ -1,5 +1,9 @@
 # 🔥 Warp Core eHMD
 
+> **⚠️ WORK IN PROGRESS — Not Production Ready**
+>
+> This project is actively being developed and iterated. Hardware pin assignments, firmware behavior, BLE protocol fields, and the Android app UI are all **subject to change** without notice. Some components listed below may be obsolete or mislabeled. Build at your own risk, and expect to reflash the firmware as updates land. The final design is not yet stable.
+
 An open-source Electronic Heat Management Device for hookah. The Warp Core replaces traditional charcoal with a PID-controlled MCH heating element, delivering precise, consistent temperature management through a sleek Android app and an on-device OLED display.
 
 ![ESP32](https://img.shields.io/badge/MCU-Arduino_Nano_ESP32-blue)
@@ -24,7 +28,7 @@ The companion Android app connects over Bluetooth Low Energy and gives you a tem
 - **Silent operation** — 20 kHz MOSFET PWM, no audible coil whine
 - **0–400°C range** — adjust from the app or on-device buttons
 - **BLE Android app** — temperature control, profiles, session logging, CSV export
-- **On-device OLED** — live temp, PWM output, battery level, and session timer
+- **On-device OLED** — live temp, PWM output, safety ramp status, and session timer
 - **Safety first** — thermal runaway detection, emergency stop, auto-disarm on fault
 - **Configurable step size** — ±1° to ±10° per button tap, set in the app's Settings
 - **Open source** — hardware + firmware + app, MIT license, build your own
@@ -46,13 +50,12 @@ A K-type thermocouple tip sits in a cutout in the graphite layer, reading the ac
 
 **The Base Station** — the electronics box that houses:
 - Arduino Nano ESP32 (brains + BLE radio)
-- SSD1306 128×64 OLED display
+- SSD1306 128×64 OLED display (I2C on D2/SDA, D3/SCL)
 - 3 navigation buttons (left, right, press/select)
-- MOSFET trigger board driving the MCH element
+- MOSFET trigger board driving the MCH element (PWM on D4)
 - MAX6675 thermocouple amplifier
 - Piezo buzzer for alerts
-- 2S2P LiPo battery pack with USB-C charging (or run externally powered)
-- Voltage divider for battery monitoring
+- Powered by any **20V 5A USB-C PD** source — no internal battery, no battery monitoring
 
 The head and base station connect via a 4-conductor cable with Mini XLR connectors — two wires for MCH power (18 AWG minimum) and two for the thermocouple signal.
 
@@ -75,19 +78,9 @@ The head and base station connect via a 4-conductor cable with Mini XLR connecto
 | Graphite Thermal Sheet | $0.29 | [Amazon](https://www.amazon.com/dp/B0C69BDLPX) |
 | Carbon Wool | $0.10 | [Amazon](https://www.amazon.com/dp/B0CFL5PZWC) |
 | K-Type Thermocouple (1 of 5) | $2.40 | [Amazon](https://www.amazon.com/dp/B0D17S7N5B) |
-| **Per-unit subtotal** | **~$61** | |
+| **Per-unit subtotal** | **~$51** | |
 
-### Battery Build (add to per-unit if building portable)
-
-| Component | Unit Cost | Source |
-|-----------|-----------|--------|
-| Mini XLR M/F Connector | $6 | [AliExpress](https://www.aliexpress.us/item/2255800871368173.html) |
-| 4× 146074 LiPo Cells | $31 | [AliExpress](https://www.aliexpress.us/item/3256810240158946.html) |
-| 140W USB-C Charging Module | $20 | [Amazon](https://www.amazon.com/dp/B0FRLBGFTH) |
-| 2S BMS (1 of 5) | $2.40 | [Amazon](https://www.amazon.com/dp/B0F3TMC5JT) |
-| **Battery build add** | **~$60** | |
-
-**Per-unit total: ~$61 (battery-less) / ~$121 (with battery)**
+**Per-unit total: ~$51 (battery-less)** — the design no longer uses an internal battery pack. Power via 20V USB-C PD.
 
 ### Consumables (buy once, use across many builds)
 
@@ -97,9 +90,8 @@ The head and base station connect via a 4-conductor cable with Mini XLR connecto
 | Screw Kit | $6 | ~$0.15 |
 | Silicone Wire Kit | $12 | ~$0.50 |
 | PLA Filament (1 kg, uses ~250g) | $19 | $4.75 |
-| Battery Heatshrink (battery build only) | $7 | ~$0.20 |
 
-**Max out-of-pocket: $171 (battery-less) / $247 (with battery)**
+**Max out-of-pocket: ~$66**
 
 ---
 
@@ -107,18 +99,17 @@ The head and base station connect via a 4-conductor cable with Mini XLR connecto
 
 | Pin | Function | Direction |
 |-----|----------|-----------|
+| D4 | MOSFET Signal | Output (digitalWrite bang-bang, ~50 Hz cycle) |
 | D5 | Press/Select Button | Input (PULLUP) |
 | D6 | Right Button | Input (PULLUP) |
 | D7 | Left Button | Input (PULLUP) |
 | D8 | Buzzer | Output (PWM ch0) |
-| D9 | MOSFET Signal | Output (PWM ch1, 20 kHz) |
 | D10 | MAX6675 SCK | Output |
 | D11 | MAX6675 CS | Output |
 | D12 | MAX6675 SO | Input |
-| A4 | OLED SDA (I2C) | I/O |
-| A5 | OLED SCL (I2C) | Output |
-| A7 | Battery Voltage Sense | Input (Analog) |
-| VIN | System power (5V) | Power in |
+| D2 | OLED SDA (I2C) | I/O |
+| D3 | OLED SCL (I2C) | Output |
+| VIN | System power (20V USB-C PD) | Power in |
 | 3V3 | Sensor power (3.3V) | Power out |
 
 All buttons wire between their pin and GND — internal pull-ups are enabled, no external resistors needed.
@@ -182,7 +173,7 @@ cd android-app
 The ESP32 advertises as **"WarpCore-eHMD"** and exposes a single service:
 
 - **Write characteristic** — app sends JSON: `{"cmd":"set_temp","val":200}`, `{"cmd":"arm","val":1}`, `{"cmd":"e_stop"}`, etc.
-- **Notify characteristic** — ESP32 pushes status every 500ms: `{"status":"ok","temp_set":200,"temp_actual":198,"armed":1,"pwm":45,"battery":78,"session":120}`
+- **Notify characteristic** — ESP32 pushes status every 500ms: `{"status":"ok","temp_set":200,"temp_actual":198,"armed":1,"pwm":45,"session":120}`
 
 Full protocol docs: [docs/BLE_PROTOCOL.md](docs/BLE_PROTOCOL.md)
 
@@ -228,9 +219,9 @@ WarpCore-eHMD/
 
 This device controls a heating element that can reach **400°C (752°F)**.
 
-- Thermal runaway protection is implemented in firmware (auto-disarm at +50°C over target)
+- **Safety ramp**: When arming, PWM is capped at 40% until the thermocouple reads 50°C, then linearly ramps to full power at 200°C. This prevents runaway if the heater is powered before it's properly seated on the bowl
+- **Thermal runaway protection**: If actual temp exceeds set temp by 50°C for 5 consecutive readings (~1.25s), the heater is killed, armed state cleared, and an alarm sounds
 - **Never** leave the device unattended while armed
-- **Read the LiPo safety briefing** in the assembly instructions before building the battery pack
 - The emergency stop button (long-press on device or in-app button) immediately kills heater power
 
 You are responsible for safe assembly and operation. This project is provided as-is with no warranty.
