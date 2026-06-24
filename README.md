@@ -3,6 +3,10 @@
 > **⚠️ WORK IN PROGRESS — Not Production Ready**
 >
 > This project is actively being developed and iterated. Hardware pin assignments, firmware behavior, BLE protocol fields, and the Android app UI are all **subject to change** without notice. Some components listed below may be obsolete or mislabeled. Build at your own risk, and expect to reflash the firmware as updates land. The final design is not yet stable.
+>
+> **Current challenges:**
+> 1. **Power draw vs. PD limits** — When cold, the MCH element's inrush pulls hard enough to trip the overcurrent protection on the USB-C PD charger (100W / 20V 5A ceiling). Balancing startup current without sacrificing heat-up speed is still being worked out.
+> 2. **MCH element selection** — Finding a ceramic MCH heating element that hits the right trade-off between wattage output and heat dispersion for this form factor. The current element works but isn't optimal.
 
 An open-source Electronic Heat Management Device for hookah. The Warp Core replaces traditional charcoal with a PID-controlled MCH heating element, delivering precise, consistent temperature management through a sleek Android app and an on-device OLED display.
 
